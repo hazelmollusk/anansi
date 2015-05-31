@@ -4,12 +4,22 @@ from django.core.exceptions import ObjectDoesNotExist
 from django.core.urlresolvers import reverse
 from django.utils.functional import cached_property
 from django.utils.encoding import python_2_unicode_compatible
+from django.conf import settings
 from model_utils import Choices
 from polymorphic import PolymorphicModel
 from jarum import *
 
+class BasicAuditedModel(models.Model):
+    created = models.DateTimeField(auto_now_add=True)
+    modified = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        abstract = True
+
+audit_model = getattr(settings, 'ANANSI_AUDIT_MODEL', BasicAuditedModel)
+
 @python_2_unicode_compatible
-class BaseEntity(PolymorphicModel):
+class BaseEntity(PolymorphicModel, audit_model):
     """Base class for Anansi objects"""
     name = models.SlugField(max_length=64)
     # TODO: do we want to subclass a more complex auditor?
@@ -32,20 +42,18 @@ class BaseEntity(PolymorphicModel):
 class ResourceEntity(BaseEntity):
     """Generic interface for connecting an external resource"""
     description = models.TextField(blank=True)
-    domain = models.CharField(max_length=64, blank=True, null=True)
-    hostname = models.CharField(max_length=64, blank=True, null=True)
-    username = models.CharField(max_length=64, blank=True, null=True)
-    password = models.CharField(max_length=64, blank=True, null=True)
-    protocol = models.CharField(max_length=16, blank=True, null=True)
-    secret = models.TextField(blank=True, null=True)
-    path = models.CharField(max_length=64, blank=True, null=True)
+    domain      = models.CharField(max_length=64, blank=True, null=True)
+    hostname    = models.CharField(max_length=64, blank=True, null=True)
+    username    = models.CharField(max_length=64, blank=True, null=True)
+    password    = models.CharField(max_length=64, blank=True, null=True)
+    protocol    = models.CharField(max_length=16, blank=True, null=True)
+    secret      = models.TextField(blank=True, null=True)
+    path        = models.CharField(max_length=64, blank=True, null=True)
 
     class Meta: pass
 
 class InventoryEntity(BaseEntity):
     auto = models.BooleanField(default=True)
-    created = models.DateTimeField(auto_now_add=True)
-    modified = models.DateTimeField(auto_now=True)
 
     def get_tag(self, key):
         return self.get_variable('anansi_tag_%s' % key)
@@ -62,10 +70,10 @@ class InventoryEntity(BaseEntity):
 @python_2_unicode_compatible
 class Variable(models.Model):
     """Generic variable attached to any entity"""
-    entity = models.ForeignKey(BaseEntity, related_name='variables', related_query_name='variable')
-    name = models.SlugField(max_length=64)
-    value = models.CharField(max_length=128)
-    auto = models.BooleanField(default=True)
+    entity  = models.ForeignKey(BaseEntity, related_name='variables', related_query_name='variable')
+    name    = models.SlugField(max_length=64)
+    value   = models.CharField(max_length=128)
+    auto    = models.BooleanField(default=True)
     # TODO: add fields for overrideable, variable type hints (for playbook usage)
 
     class Meta:
@@ -74,7 +82,7 @@ class Variable(models.Model):
     def __str__(self): return self.name
 
 class VariableGroup(BaseEntity):
-    entity = models.ManyToManyField(InventoryEntity, related_name='variable_sgroups', related_query_name='variable_group')
+    entity = models.ManyToManyField(InventoryEntity, related_name='variable_groups', related_query_name='variable_group')
 
     class Meta:
         verbose_name = 'variable group'
@@ -92,8 +100,8 @@ class Tag(models.Model):
 @python_2_unicode_compatible
 class TagOption(models.Model):
     """A selectable option for the given tag"""
-    tag = models.ForeignKey(Tag, related_name='options', related_query_name='option')
-    value = models.CharField(max_length=50)
+    tag     = models.ForeignKey(Tag, related_name='options', related_query_name='option')
+    value   = models.CharField(max_length=50)
 
     class Meta:
         verbose_name = 'tag option'
@@ -102,10 +110,10 @@ class TagOption(models.Model):
 
 class Host(InventoryEntity):
     """A single discovered host"""
-    hostname = models.CharField(max_length=128, blank=True, null=True, default=None)
-    source = models.ForeignKey('Collector', blank=True, null=True, related_name='hosts', related_query_name='host')
-    active = models.BooleanField(default=True)
-    last_seen = models.DateTimeField(auto_now_add=True)
+    hostname    = models.CharField(max_length=128, blank=True, null=True, default=None)
+    source      = models.ForeignKey('Collector', blank=True, null=True, related_name='hosts', related_query_name='host')
+    active      = models.BooleanField(default=True)
+    last_seen   = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         verbose_name = 'host'
@@ -116,8 +124,8 @@ class Host(InventoryEntity):
 
 class Group(InventoryEntity):
     """A group of discovered hosts; may contain variables and subgroups"""
-    hosts = models.ManyToManyField(Host, related_name='groups', related_query_name='group')
-    subgroups = models.ManyToManyField('self', symmetrical=False)
+    hosts       = models.ManyToManyField(Host, related_name='groups', related_query_name='group')
+    subgroups   = models.ManyToManyField('self', symmetrical=False)
 
     class Meta:
         verbose_name = 'group'
@@ -137,7 +145,7 @@ class GroupPatternManager(models.Manager):
         return filter(None, [ pattern.get_groups(host) for pattern in self.all() ])
 
 @python_2_unicode_compatible
-class GroupPattern(models.Model):
+class GroupPattern(audit_model):
     SEPARATOR = '-'
 
     pattern = models.CharField(max_length=64)
@@ -174,8 +182,7 @@ class Collector(ResourceEntity):
     def get_absolute_url(self): return reverse('anansi:collector', args=[str(self.id)])
 
     def collect_hosts(self):
-        """
-        Collect hosts
+        """Collect hosts
 
         This method must be implemented by sub-classes of
         Collector, and should return a dictionary of
@@ -184,8 +191,7 @@ class Collector(ResourceEntity):
         raise NotImplementedError
 
     def update(self, fetch=True):
-        """
-        Update the inventory for this collector
+        """Update the inventory for this collector
 
         Calls the sub-class implementation of collect_hosts(),
         updates inventory and adds necessary metadata.
@@ -268,7 +274,7 @@ class StaticCollector(Collector):
     )
 
     filename = models.CharField(max_length=64, blank=True, null=True)
-    format = models.CharField(max_length=32, choices=STATIC_FORMATS)
+    format   = models.CharField(max_length=32, choices=STATIC_FORMATS)
 
     class Meta:
         verbose_name = 'static collector'
@@ -281,9 +287,9 @@ class LocalCollector(Collector):
     def collect_hosts(self): return { 'localhost':{}}
 
 class VMWareCollector(Collector):
-    datacenter = models.CharField(max_length=32, blank=True, null=True)
-    cluster = models.CharField(max_length=32, blank=True, null=True)
-    resource_pool = models.CharField(max_length=32, blank=True, null=True)
+    datacenter      = models.CharField(max_length=32, blank=True, null=True)
+    cluster         = models.CharField(max_length=32, blank=True, null=True)
+    resource_pool   = models.CharField(max_length=32, blank=True, null=True)
 
     class Meta:
         verbose_name = 'VMWare collector'

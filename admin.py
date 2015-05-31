@@ -68,10 +68,11 @@ class LocalCollectorAdmin(PolymorphicChildModelAdmin):
         )
     inlines = [ VariableInline, ]
 
-def collect_action(modeladmin, request, queryset):
-  for c in queryset:
-    c.update()
-collect_action.short_description = 'Update collections'
+## has issues with Polymorphic
+# def collect_action(modeladmin, request, queryset):
+#   for c in queryset:
+#     c.update()
+# collect_action.short_description = 'Update collections'
 
 class CollectorParentAdmin(PolymorphicParentModelAdmin):
     base_model = Collector
@@ -81,15 +82,10 @@ class CollectorParentAdmin(PolymorphicParentModelAdmin):
         (StaticCollector, StaticCollectorAdmin),
         (LocalCollector, LocalCollectorAdmin),
     )
-    actions = [ collect_action ]
+#    actions = [ collect_action ]
 
 class HostAdmin(admin.ModelAdmin):
-    fieldsets = (
-        ('Host', { 'fields':(
-            ('name', 'source', 'auto'),
-            ('created', 'modified'),
-        )}),
-    )
+    fields = ('name', 'source', 'auto',)
     inlines = [ VariableInline ]
 
 admin.site.register(Collector, CollectorParentAdmin)
