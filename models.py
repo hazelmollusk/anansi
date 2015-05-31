@@ -4,11 +4,12 @@ from django.core.exceptions import ObjectDoesNotExist
 from django.core.urlresolvers import reverse
 from django.utils.functional import cached_property
 from django.utils.encoding import python_2_unicode_compatible
+from model_utils import Choices
 from polymorphic import PolymorphicModel
-
+from jarum import *
 
 @python_2_unicode_compatible
-class AnansiBaseEntity(PolymorphicModel):
+class BaseEntity(PolymorphicModel):
     """Base class for Anansi objects"""
     name = models.SlugField(max_length=64)
     # TODO: do we want to subclass a more complex auditor?
@@ -28,9 +29,9 @@ class AnansiBaseEntity(PolymorphicModel):
     def get_variables(self): #TODO must include vargroup vars
         return dict( [ (v.name, v.value) for v in self.variables.all() ])
 
-class AnansiResourceEntity(AnansiBaseEntity):
+class ResourceEntity(BaseEntity):
     """Generic interface for connecting an external resource"""
-    description = models.TextField()
+    description = models.TextField(blank=True)
     domain = models.CharField(max_length=64, blank=True, null=True)
     hostname = models.CharField(max_length=64, blank=True, null=True)
     username = models.CharField(max_length=64, blank=True, null=True)
@@ -41,10 +42,10 @@ class AnansiResourceEntity(AnansiBaseEntity):
 
     class Meta: pass
 
-class AnansiInventoryEntity(AnansiBaseEntity):
+class InventoryEntity(BaseEntity):
     auto = models.BooleanField(default=True)
     created = models.DateTimeField(auto_now_add=True)
-    last_modified = models.DateTimeField(auto_now=True)
+    modified = models.DateTimeField(auto_now=True)
 
     def get_tag(self, key):
         return self.get_variable('anansi_tag_%s' % key)
@@ -59,9 +60,9 @@ class AnansiInventoryEntity(AnansiBaseEntity):
         pass
 
 @python_2_unicode_compatible
-class AnansiVariable(models.Model):
+class Variable(models.Model):
     """Generic variable attached to any entity"""
-    entity = models.ForeignKey(AnansiBaseEntity, related_name='variables', related_query_name='variable')
+    entity = models.ForeignKey(BaseEntity, related_name='variables', related_query_name='variable')
     name = models.SlugField(max_length=64)
     value = models.CharField(max_length=128)
     auto = models.BooleanField(default=True)
@@ -72,14 +73,14 @@ class AnansiVariable(models.Model):
 
     def __str__(self): return self.name
 
-class AnansiVariableGroup(AnansiBaseEntity):
-    entity = models.ManyToManyField(AnansiInventoryEntity, related_name='variable_sgroups', related_query_name='variable_group')
+class VariableGroup(BaseEntity):
+    entity = models.ManyToManyField(InventoryEntity, related_name='variable_sgroups', related_query_name='variable_group')
 
     class Meta:
         verbose_name = 'variable group'
 
 @python_2_unicode_compatible
-class AnansiTag(models.Model):
+class Tag(models.Model):
     """An inventory tag used in building group memberships"""
     name = models.SlugField(max_length=64, unique=True)
 
@@ -89,9 +90,9 @@ class AnansiTag(models.Model):
     def __str__(self): return self.name
 
 @python_2_unicode_compatible
-class AnansiTagOption(models.Model):
+class TagOption(models.Model):
     """A selectable option for the given tag"""
-    tag = models.ForeignKey(AnansiTag, related_name='options', related_query_name='option')
+    tag = models.ForeignKey(Tag, related_name='options', related_query_name='option')
     value = models.CharField(max_length=50)
 
     class Meta:
@@ -99,9 +100,10 @@ class AnansiTagOption(models.Model):
 
     def __str__(self): return '%s(%s)' % (self.tag.name, self.value)
 
-class AnansiHost(AnansiInventoryEntity):
+class Host(InventoryEntity):
     """A single discovered host"""
-    source = models.ForeignKey('AnansiCollector', blank=True, null=True, related_name='hosts', related_query_name='host')
+    hostname = models.CharField(max_length=128, blank=True, null=True, default=None)
+    source = models.ForeignKey('Collector', blank=True, null=True, related_name='hosts', related_query_name='host')
     active = models.BooleanField(default=True)
     last_seen = models.DateTimeField(auto_now_add=True)
 
@@ -112,9 +114,9 @@ class AnansiHost(AnansiInventoryEntity):
     def get_variables(self):
         pass
 
-class AnansiGroup(AnansiInventoryEntity):
+class Group(InventoryEntity):
     """A group of discovered hosts; may contain variables and subgroups"""
-    hosts = models.ManyToManyField(AnansiHost, related_name='groups', related_query_name='group')
+    hosts = models.ManyToManyField(Host, related_name='groups', related_query_name='group')
     subgroups = models.ManyToManyField('self', symmetrical=False)
 
     class Meta:
@@ -129,26 +131,45 @@ class AnansiGroup(AnansiInventoryEntity):
                 host_list = host_list.union(set(subgroup.get_hosts()))
         return list(host_list)
 
+class GroupPatternManager(models.Manager):
+    def get_group_names(self, host):
+        """Apply all patterns to a host, returning a list of group names"""
+        return filter(None, [ pattern.get_groups(host) for pattern in self.all() ])
+
 @python_2_unicode_compatible
-class AnansiGroupPattern(models.Model):
+class GroupPattern(models.Model):
+    SEPARATOR = '-'
+
     pattern = models.CharField(max_length=64)
+
+    objects = GroupPatternManager()
 
     class Meta:
         verbose_name = 'group pattern'
 
     def __str__(self): return self.pattern
 
+    def get_group_name(self, host):
+        """Apply this pattern to a host, returning a group name (or None)"""
+        group_parts = []
+        parts = self.pattern.split(self.SEPARATOR)
+        for part in parts:
+            if host.has_tag(part): group_parts.append(host.get_tag(part))
+            else: return None
+        else:
+            return self.SEPARATOR.join(group_parts)
+
 @python_2_unicode_compatible
-class AnansiCollector(AnansiResourceEntity):
+class Collector(ResourceEntity):
     """Base class for collector implementations"""
     last_updated = models.DateTimeField(blank=True, null=True)
 
     class Meta:
-        verbose_name = 'Collector'
+        verbose_name = 'collector'
 
     def __str__(self): return self.name
 
-    def save(self): super(AnansiCollector, self).save()
+    def save(self): super(Collector, self).save()
 
     def get_absolute_url(self): return reverse('anansi:collector', args=[str(self.id)])
 
@@ -160,10 +181,6 @@ class AnansiCollector(AnansiResourceEntity):
         Collector, and should return a dictionary of
         { 'host_name' : { 'variable1' : 'value', ... } }
         """
-        raise NotImplementedError
-
-    def get_collector_type(self):
-        """Short name for this collector type"""
         raise NotImplementedError
 
     def update(self, fetch=True):
@@ -191,17 +208,13 @@ class AnansiCollector(AnansiResourceEntity):
     def _tag_map(self):
         return dict([
                 (tag.name, [ opt.value for opt in tag.options.all() ])
-                for tag in AnansiTag.objects.all()
+                for tag in Tag.objects.all()
             ])
-
-    @cached_property
-    def _pattern_list(self):
-        return [ p.pattern for p in AnansiGroupPattern.objects.all() ]
 
     def _add_host(self, hostname, variables=None):
         """Add or update a discovered host"""
         # create/activate host as needed
-        host, created = AnansiHost.objects.get_or_create(name=hostname)
+        host, created = Host.objects.get_or_create(name=hostname)
         host.last_seen = datetime.now()
         host.active = True
         host.source = self
@@ -214,10 +227,10 @@ class AnansiCollector(AnansiResourceEntity):
                 host.set_variable(k, v)
         # add collector variables
         host.set_variable('anansi_source', self.slug)
-        host.set_variable('anansi_source_type', self.get_collector_type())
         host.set_variable('anansi_source_class', self.__class__.__name__.lower())
 
     def _update_metadata(self):
+        # TODO: adding tags based on criteria (not just hostname) should use a plugin system
         for host in self.hosts.all():
             # add tag variables from hostname
             host_parts = host.name.split('-')
@@ -226,54 +239,54 @@ class AnansiCollector(AnansiResourceEntity):
                 for opt in tag_opts:
                     if opt in host_parts:
                         host.set_tag(tag, opt, True)
-            # add host to groups from tags
-            for pattern in self._pattern_list:
-                # pattern ~= 'type-site-stage'
-                group_parts = []
-                parts = pattern.split('-')
-                # parts ~= [ 'type', 'site', 'stage' ]
-                for part in parts:
-                    if host.has_tag(part): group_parts.append(host.get_tag(part))
-                    else: break
-                else:
-                    # host has all the required tags
-                    # host_parts ~= [ 'db', 'us', 'prod' ]
-                    group_name = '-'.join(group_parts)
-                    # group_name ~= 'db-us-prod'
-                    group, created = AnansiGroup.objects.get_or_create(name=group_name, auto=True)
-                    if created: group.save()
-                    host.groups.add(group)
+
+            for group_name in GroupPattern.objects.get_group_names(host):
+                group, created = Group.objects.get_or_create(name=group_name, auto=True)
+                if created: group.save()
+                host.groups.add(group)
 
 #TODO: this
-class AnansiEC2Collector(AnansiCollector):
+class EC2Collector(Collector):
     region = models.CharField(max_length=64)
 
     class Meta:
         verbose_name = 'EC2 collector'
 
-    def get_collector_type(self): return 'ec2'
-
     def collect_hosts(self): pass
 
-class AnansiStaticCollector(AnansiCollector):
-    filename = models.CharField(max_length=64)
+
+class XenCollector(Collector):
 
     class Meta:
-        verbose_name = 'Static Collector'
-
-    def get_collector_type(self): return 'static'
+        verbose_name = 'Xen collector'
 
     def collect_hosts(self): pass
 
-class AnansiVMWareCollector(AnansiCollector):
+class StaticCollector(Collector):
+    STATIC_FORMATS = Choices(
+        ('ansible', 'Ansible hosts.ini'),
+    )
+
+    filename = models.CharField(max_length=64, blank=True, null=True)
+    format = models.CharField(max_length=32, choices=STATIC_FORMATS)
+
+    class Meta:
+        verbose_name = 'static collector'
+
+    def collect_hosts(self): pass
+
+
+class LocalCollector(Collector):
+    class Meta: verbose_name = 'local collector'
+    def collect_hosts(self): return { 'localhost':{}}
+
+class VMWareCollector(Collector):
     datacenter = models.CharField(max_length=32, blank=True, null=True)
     cluster = models.CharField(max_length=32, blank=True, null=True)
     resource_pool = models.CharField(max_length=32, blank=True, null=True)
 
     class Meta:
         verbose_name = 'VMWare collector'
-
-    def get_collector_type(self): return 'vmware'
 
     def collect_hosts(self):
         host_list = {}

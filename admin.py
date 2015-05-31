@@ -1,21 +1,21 @@
 from django.contrib import admin
 from polymorphic.admin import PolymorphicParentModelAdmin, PolymorphicChildModelAdmin
-from models import *
+from .models import *
 
-class AnansiTagOptionInline(admin.TabularInline):
-    model = AnansiTagOption
+class TagOptionInline(admin.TabularInline):
+    model = TagOption
     extra = 0
 
-class AnansiTagAdmin(admin.ModelAdmin):
-    inlines = [ AnansiTagOptionInline, ]
+class TagAdmin(admin.ModelAdmin):
+    inlines = [ TagOptionInline, ]
 
-class AnansiVariableInline(admin.TabularInline):
-    model = AnansiVariable
+class VariableInline(admin.TabularInline):
+    model = Variable
     fields = ('name', 'value', 'auto')
     extra = 0
 
-class AnansiCollectorBaseAdmin(PolymorphicChildModelAdmin):
-    base_model = AnansiCollector
+class CollectorBaseAdmin(PolymorphicChildModelAdmin):
+    base_model = Collector
     base_fields = ('name', 'description',)
     base_fieldsets = (
         ('Collector options', {'fields': (
@@ -24,8 +24,8 @@ class AnansiCollectorBaseAdmin(PolymorphicChildModelAdmin):
         )}),
     )
 
-class AnansiVMWareCollectorAdmin(AnansiCollectorBaseAdmin):
-    base_model = AnansiCollector
+class VMWareCollectorAdmin(CollectorBaseAdmin):
+    base_model = Collector
     base_fieldsets = (
         ('Connection options', {'fields': (
             ('hostname', ),
@@ -37,43 +37,64 @@ class AnansiVMWareCollectorAdmin(AnansiCollectorBaseAdmin):
             ), 'classes': ('collapse',)
         }),
     )
-    inlines = [ AnansiVariableInline, ]
+    inlines = [ VariableInline, ]
 
-class AnansiEC2CollectorAdmin(PolymorphicChildModelAdmin):
-    base_model = AnansiCollector
+class EC2CollectorAdmin(PolymorphicChildModelAdmin):
+    base_model = Collector
     base_fieldsets = (
         ('Connection options', {'fields': (
             ('username', 'password'),
         )}),
         ('EC2 options', { 'fields':(('region',),) }),
         )
-    inlines = [ AnansiVariableInline, ]
+    inlines = [ VariableInline, ]
+
+class StaticCollectorAdmin(PolymorphicChildModelAdmin):
+    base_model = Collector
+    base_fieldsets = (
+        ('Connection options', {'fields': (
+            ('username', 'password'),
+        )}),
+        ('Static options', { 'fields':(('filename',),) }),
+        )
+    inlines = [ VariableInline, ]
+
+class LocalCollectorAdmin(PolymorphicChildModelAdmin):
+    base_model = Collector
+    base_fieldsets = (
+        ('Connection options', {'fields': (
+            ('username', 'password'),
+            )}),
+        )
+    inlines = [ VariableInline, ]
 
 def collect_action(modeladmin, request, queryset):
   for c in queryset:
-    c.collect()
+    c.update()
 collect_action.short_description = 'Update collections'
 
-class AnansiCollectorParentAdmin(PolymorphicParentModelAdmin):
-    base_model = AnansiCollector
+class CollectorParentAdmin(PolymorphicParentModelAdmin):
+    base_model = Collector
     child_models = (
-        (AnansiVMWareCollector, AnansiVMWareCollectorAdmin),
-        (AnansiEC2Collector, AnansiEC2CollectorAdmin),
+        (VMWareCollector, VMWareCollectorAdmin),
+        (EC2Collector, EC2CollectorAdmin),
+        (StaticCollector, StaticCollectorAdmin),
+        (LocalCollector, LocalCollectorAdmin),
     )
     actions = [ collect_action ]
 
-class AnansiHostAdmin(admin.ModelAdmin):
+class HostAdmin(admin.ModelAdmin):
     fieldsets = (
         ('Host', { 'fields':(
             ('name', 'source', 'auto'),
             ('created', 'modified'),
         )}),
     )
-    inlines = [ AnansiVariableInline ]
+    inlines = [ VariableInline ]
 
-admin.site.register(AnansiCollector, AnansiCollectorParentAdmin)
-admin.site.register(AnansiTag, AnansiTagAdmin)
-admin.site.register(AnansiHost, AnansiHostAdmin)
-admin.site.register(AnansiGroup)
-admin.site.register(AnansiVariableGroup)
-admin.site.register(AnansiGroupPattern)
+admin.site.register(Collector, CollectorParentAdmin)
+admin.site.register(Tag, TagAdmin)
+admin.site.register(Host, HostAdmin)
+admin.site.register(Group)
+admin.site.register(VariableGroup)
+admin.site.register(GroupPattern)
