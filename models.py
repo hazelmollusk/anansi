@@ -7,6 +7,7 @@ from django.utils.encoding import python_2_unicode_compatible
 from django.conf import settings
 from model_utils import Choices
 from polymorphic import PolymorphicModel
+from log import LogModel
 from jarum import *
 
 class BasicAuditedModel(models.Model):
@@ -16,10 +17,10 @@ class BasicAuditedModel(models.Model):
     class Meta:
         abstract = True
 
-audit_model = getattr(settings, 'ANANSI_AUDIT_MODEL', BasicAuditedModel)
+BasicAuditModel = getattr(settings, 'ANANSI_AUDIT_MODEL', BasicAuditedModel)
 
 @python_2_unicode_compatible
-class BaseEntity(PolymorphicModel, audit_model):
+class BaseEntity(PolymorphicModel, BasicAuditModel, LogModel):
     """Base class for Anansi objects"""
     name = models.SlugField(max_length=64)
     # TODO: do we want to subclass a more complex auditor?
@@ -68,7 +69,7 @@ class InventoryEntity(BaseEntity):
         pass
 
 @python_2_unicode_compatible
-class Variable(models.Model):
+class Variable(LogModel):
     """Generic variable attached to any entity"""
     entity  = models.ForeignKey(BaseEntity, related_name='variables', related_query_name='variable')
     name    = models.SlugField(max_length=64)
@@ -88,7 +89,7 @@ class VariableGroup(BaseEntity):
         verbose_name = 'variable group'
 
 @python_2_unicode_compatible
-class Tag(models.Model):
+class Tag(LogModel):
     """An inventory tag used in building group memberships"""
     name = models.SlugField(max_length=64, unique=True)
 
@@ -98,7 +99,7 @@ class Tag(models.Model):
     def __str__(self): return self.name
 
 @python_2_unicode_compatible
-class TagOption(models.Model):
+class TagOption(LogModel):
     """A selectable option for the given tag"""
     tag     = models.ForeignKey(Tag, related_name='options', related_query_name='option')
     value   = models.CharField(max_length=50)
@@ -145,7 +146,7 @@ class GroupPatternManager(models.Manager):
         return filter(None, [ pattern.get_groups(host) for pattern in self.all() ])
 
 @python_2_unicode_compatible
-class GroupPattern(audit_model):
+class GroupPattern(BasicAuditModel):
     SEPARATOR = '-'
 
     pattern = models.CharField(max_length=64)
