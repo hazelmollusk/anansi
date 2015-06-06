@@ -10,6 +10,8 @@ from polymorphic import PolymorphicModel
 from log import LogModel
 from jarum import *
 
+VERSION = (0, 0, 1)
+
 class BasicAuditedModel(models.Model):
     created = models.DateTimeField(auto_now_add=True)
     modified = models.DateTimeField(auto_now=True)
@@ -17,13 +19,12 @@ class BasicAuditedModel(models.Model):
     class Meta:
         abstract = True
 
-BasicAuditModel = getattr(settings, 'ANANSI_AUDIT_MODEL', BasicAuditedModel)
+AuditModelBase = getattr(settings, 'ANANSI_AUDIT_MODEL', BasicAuditedModel)
 
 @python_2_unicode_compatible
-class BaseEntity(PolymorphicModel, BasicAuditModel, LogModel):
+class BaseEntity(PolymorphicModel, AuditModelBase, LogModel):
     """Base class for Anansi objects"""
     name = models.SlugField(max_length=64)
-    # TODO: do we want to subclass a more complex auditor?
 
     def __str__(self): return self.name
 
@@ -146,7 +147,7 @@ class GroupPatternManager(models.Manager):
         return filter(None, [ pattern.get_groups(host) for pattern in self.all() ])
 
 @python_2_unicode_compatible
-class GroupPattern(BasicAuditModel):
+class GroupPattern(AuditModelBase):
     SEPARATOR = '-'
 
     pattern = models.CharField(max_length=64)
@@ -169,8 +170,16 @@ class GroupPattern(BasicAuditModel):
             return self.SEPARATOR.join(group_parts)
 
 @python_2_unicode_compatible
-class Collector(ResourceEntity):
+class Collector(BaseEntity):
     """Base class for collector implementations"""
+    description = models.TextField(blank=True)
+    domain      = models.CharField(max_length=64, blank=True, null=True)
+    hostname    = models.CharField(max_length=64, blank=True, null=True)
+    username    = models.CharField(max_length=64, blank=True, null=True)
+    password    = models.CharField(max_length=64, blank=True, null=True)
+    protocol    = models.CharField(max_length=16, blank=True, null=True)
+    secret      = models.TextField(blank=True, null=True)
+    path        = models.CharField(max_length=64, blank=True, null=True)
     last_updated = models.DateTimeField(blank=True, null=True)
 
     class Meta:
@@ -261,7 +270,6 @@ class EC2Collector(Collector):
 
     def collect_hosts(self): pass
 
-
 class XenCollector(Collector):
 
     class Meta:
@@ -281,7 +289,6 @@ class StaticCollector(Collector):
         verbose_name = 'static collector'
 
     def collect_hosts(self): pass
-
 
 class LocalCollector(Collector):
     class Meta: verbose_name = 'local collector'

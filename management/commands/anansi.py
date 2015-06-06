@@ -2,11 +2,20 @@ from optparse import make_option
 try: import json
 except ImportError: import simplejson as json
 from django.core.management.base import BaseCommand, CommandError
-from anansi.models import *
+from ...models import *
 
 class Command(BaseCommand):
   args = '[options]'
-  help = 'Generate dynamic inventory data for ansible'
+  help = 'a dynamic ansible wrapper'
+
+  def add_arguments(self, parser):
+      parser.add_argument('-l', '--foo',
+          action='append_const',
+          const='list_hosts',
+                          )
+
+  def get_version(self):
+      return '.'.join(VERSION)
 
   option_list = BaseCommand.option_list + (
         make_option('--list',

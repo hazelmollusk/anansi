@@ -21,4 +21,4 @@ try:
     from django.db import models
     class LogModel(models.Model, LogBase):
         class Meta: abstract = True
-except ImportError: pass
+except ImportError: models = None
