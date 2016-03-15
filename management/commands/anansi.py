@@ -53,7 +53,7 @@ class Command(BaseCommand):
   def output_list(self, name=None):
     jsobj = {}
     group_hosts = None
-    for group in InventoryGroup.objects.all():
+    for group in Group.objects.all():
       group_hosts = group.hosts.filter(active=True)
       if name is not None: group_hosts = group_hosts.filter(source__slug=name)
       if group_hosts.exists():
@@ -77,20 +77,20 @@ class Command(BaseCommand):
   #TODO should this include inherited group vars?
   def output_host(self, hostname):
     try:
-      host = InventoryHost.objects.get(name=hostname)
+      host = Host.objects.get(name=hostname)
       jsobj = dict( [ (v.name, v.value) for v in host.variables.all() ] )
       self.stdout.write(json.dumps(jsobj, indent=4, separators=(',',': ')))
     except: return
 
   def update(self, name=None):
-    collectors = InventoryCollector.objects.all()
+    collectors = Collector.objects.all()
     if name is not None: collectors = collectors.filter(slug=name)
     for c in collectors:
       self.stdout.write('Collecting for %s...' % c.name)
       c.collect()
 
   def update_groups(self, name=None):
-    collectors = InventoryCollector.objects.all()
+    collectors = Collector.objects.all()
     if name is not None: collectors = collectors.filter(slug=name)
     for c in collectors:
       self.stdout.write(' for %s...' % c.name)

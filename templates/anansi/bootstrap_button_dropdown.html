@@ -1,0 +1,12 @@
+{% load url from future %}
+
+<div class="btn-group">
+  <button type="button" class="btn btn-default dropdown-toggle" data-toggle="dropdown" aria-expanded="false">
+    {{ button_label }} <span class="caret"></span>
+  </button>
+  <ul class="dropdown-menu" role="menu">
+      {% for option in button_options %}
+        <li><a href="{% url button_url %}?{{ button_param }}={{ option.0 }}">{{ option.1 }}</a></li>
+      {% endfor %}
+  </ul>
+</div>

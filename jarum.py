@@ -75,3 +75,53 @@ class AdditionalMeta(ModelBase):
         for k, v in opt_list.items():
             setattr(cls, '_'+uncamel(k), v)
         super(AdditionalMeta, cls).__init__(name, parents, attrs)
+
+class GenericViewSet(object):
+    model = None
+    name_prefix = ''
+    name = None
+    plural = None
+    _cache = {}
+
+    @classmethod
+    def get_url_patterns(cls):
+        from django.conf.urls import url
+        name = cls.name or cls.model._meta.verbose_name.replace(' ', '-')
+        plural = cls.plural or cls.model._meta.verbose_name_plural.replace(' ', '-')
+        return (
+            url(r'%s/$' % plural, cls.list(), name='%s-%s' % (cls.name_prefix, plural)),
+            url(r'%s/create$' % plural, cls.create(), name='%s-%s-create' % (cls.name_prefix, plural)),
+            url(r'%s/(?P<id>[0-9]*)/update$' % name, cls.update(), name='%s-%s-update' % (cls.name_prefix, name)),
+            url(r'%s/(?P<id>[0-9]*)/delete' % name, cls.delete(), name='%s-%s-delete' % (cls.name_prefix, name)),
+            url(r'%s/(?P<id>[0-9]*)/$' % name, cls.detail(), name='%s-%s-detail' % (cls.name_prefix, name)),
+        )
+
+    @classmethod
+    def get_view_class(cls, view_class):
+        class GV(view_class): model = cls.model
+        return GV
+
+    @classmethod
+    def list(cls):
+        from django.views.generic import ListView
+        return cls.get_view_class(ListView).as_view()
+
+    @classmethod
+    def detail(cls):
+        from django.views.generic import DetailView
+        return cls.get_view_class(DetailView).as_view()
+
+    @classmethod
+    def update(cls):
+        from django.views.generic import UpdateView
+        cls.get_view_class(UpdateView).as_view()
+
+    @classmethod
+    def create(cls):
+        from django.views.generic import CreateView
+        return cls.get_view_class(CreateView).as_view()
+
+    @classmethod
+    def delete(cls):
+        from django.views.generic import DeleteView
+        return cls.get_view_class(DeleteView).as_view()

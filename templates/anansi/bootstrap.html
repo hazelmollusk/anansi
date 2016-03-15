@@ -1,0 +1,19 @@
+{% extends 'bootstrap3/bootstrap3.html' %}
+{% load staticfiles %}
+
+{% block bootstrap3_extra_head %}
+    {{ block.super }}
+    {% block anansi_extra_head %}
+        <link type="text/css" rel="stylesheet" href="{% static 'anansi/css/anansi.css' %}" />
+        <script type="text/javascript" src="{% static 'anansi/js/anansi.js' %}"></script>
+        <script type="text/javascript">
+            {% block anansi_head_js %}{% endblock %}
+        </script>
+    {% endblock %}
+{% endblock %}
+{% block bootstrap3_extra_script %}
+    {{ block.super }}
+    {% block anansi_tail_js %}{% endblock %}
+{% endblock %}
+
+{% block bootstrap3_title %}{% block title %}{% endblock %} | Anansi{% endblock %}

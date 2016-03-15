@@ -7,10 +7,10 @@ from django.utils.encoding import python_2_unicode_compatible
 from django.conf import settings
 from model_utils import Choices
 from polymorphic import PolymorphicModel
-from log import LogModel
+from log import LogMixin
 from jarum import *
 
-VERSION = (0, 0, 1)
+VERSION = (0, 0, 2)
 
 class BasicAuditedModel(models.Model):
     created = models.DateTimeField(auto_now_add=True)
@@ -22,7 +22,7 @@ class BasicAuditedModel(models.Model):
 AuditModelBase = getattr(settings, 'ANANSI_AUDIT_MODEL', BasicAuditedModel)
 
 @python_2_unicode_compatible
-class BaseEntity(PolymorphicModel, AuditModelBase, LogModel):
+class BaseEntity(PolymorphicModel, AuditModelBase, LogMixin):
     """Base class for Anansi objects"""
     name = models.SlugField(max_length=64)
 
@@ -70,7 +70,7 @@ class InventoryEntity(BaseEntity):
         pass
 
 @python_2_unicode_compatible
-class Variable(LogModel):
+class Variable(models.Model):
     """Generic variable attached to any entity"""
     entity  = models.ForeignKey(BaseEntity, related_name='variables', related_query_name='variable')
     name    = models.SlugField(max_length=64)
@@ -90,7 +90,7 @@ class VariableGroup(BaseEntity):
         verbose_name = 'variable group'
 
 @python_2_unicode_compatible
-class Tag(LogModel):
+class Tag(models.Model):
     """An inventory tag used in building group memberships"""
     name = models.SlugField(max_length=64, unique=True)
 
@@ -100,7 +100,7 @@ class Tag(LogModel):
     def __str__(self): return self.name
 
 @python_2_unicode_compatible
-class TagOption(LogModel):
+class TagOption(models.Model):
     """A selectable option for the given tag"""
     tag     = models.ForeignKey(Tag, related_name='options', related_query_name='option')
     value   = models.CharField(max_length=50)
@@ -325,3 +325,8 @@ class VMWareCollector(Collector):
         vs = pysphere.VIServer()
         vs.connect(self.target.hostname, self.target.username, self.target.password)
         return vs
+
+
+class Role(models.Model): pass
+class Book(models.Model): pass
+class Library(models.Model): pass
